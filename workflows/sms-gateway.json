@@ -1,0 +1,266 @@
+{
+  "id": "eIHpRh8P2PKgqus2",
+  "name": "ThesisLab - SMS Gateway",
+  "active": true,
+  "nodes": [
+    {
+      "id": "18ffc84c-0c08-4e71-8318-f0a6658183e0",
+      "name": "Incoming Text",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "thesislab-sms",
+        "responseMode": "onReceived",
+        "options": {
+          "noResponseBody": true
+        }
+      },
+      "webhookId": "521a63db-a9ed-4165-a6dc-e6330a4199e1"
+    },
+    {
+      "id": "8ad064d6-cad5-4edf-866a-079d30a2e274",
+      "name": "SMS Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "allowed_numbers",
+              "value": "[redacted-phone]",
+              "type": "string"
+            },
+            {
+              "id": "s2",
+              "name": "twilio_number",
+              "value": "+17372583742",
+              "type": "string"
+            },
+            {
+              "id": "s3",
+              "name": "api_url",
+              "value": "https://franki3.app.n8n.cloud/webhook/thesislab",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f18ea34a-80ed-4dd2-ae5e-c207ee586373",
+      "name": "Parse Text Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const b = $json.body || {};\nconst digits = (s) => String(s || '').replace(/[^0-9]/g, '').slice(-10);\nconst from = String(b.From || '').trim();\nconst allowed = String($json.allowed_numbers || '').split(/[,;]+/).map(digits).filter((d) => d.length === 10);\nconst text = String(b.Body || '').trim();\n\nlet request = null;\nconst cmd = text.match(/^\\s*(APPROVE|REJECT|EVALUATE|CLOSE)\\s+(TL-[A-Z0-9-]+)(\\s+EARLY)?/i);\nif (cmd) {\n  const verb = cmd[1].toUpperCase();\n  const id = cmd[2].toUpperCase();\n  if (verb === 'APPROVE') request = { action: 'approve_trade', experiment_id: id, confirm: true };\n  if (verb === 'REJECT') request = { action: 'reject', experiment_id: id };\n  if (verb === 'EVALUATE') request = { action: 'evaluate', experiment_id: id };\n  if (verb === 'CLOSE') request = { action: 'close_position', experiment_id: id, confirm: true, early_exit: !!cmd[3] };\n} else if (text.length >= 10) {\n  const amt = text.match(/\\$\\s?([0-9][0-9,]*)/);\n  request = { action: 'analyze', thesis: text.slice(0, 1600), notional_usd: amt ? Number(amt[1].replace(/,/g, '')) : 0 };\n}\n\nconst allowedSender = from !== '' && allowed.includes(digits(from));\nreturn { json: {\n  from,\n  allowed_sender: allowedSender,\n  authorized: allowedSender && !!request,\n  request: request || {},\n  api_url: $json.api_url,\n  twilio_number: $json.twilio_number,\n} };"
+      }
+    },
+    {
+      "id": "9e84c2eb-10c3-4847-8ca8-4cb5bfbb1bfc",
+      "name": "Authorized Text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "5f4d511f-e809-487a-ab7b-f7e374f31bbd",
+      "name": "Call ThesisLab API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.api_url }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "7d06e5ba-badd-402d-b2df-67cf176d9a5c",
+      "name": "Format Text Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $json || {};\nconst src = $('Parse Text Command').item.json;\nconst req = src.request || {};\nconst LF = String.fromCharCode(10);\nconst L = [];\nconst p = r.proposal || {};\nif (!r || Object.keys(r).length === 0 || (r.ok === undefined && !r.action)) {\n  L.push('ThesisLab could not process this right now. Nothing was traded.');\n} else if (r.action === 'analyze') {\n  if ((r.status === 'proposed' || r.status === 'proposal') && r.experiment_id) {\n    L.push('Arthur Voss: ' + r.experiment_id);\n    L.push((p.asset || '?') + ' vs ' + (p.benchmark || '?') + ', ' + (p.horizon_days || '?') + ' trading days, $' + r.notional_usd + ' paper' + (r.allocation_capped ? ' (capped)' : ''));\n    L.push('The Bet: ' + (p.falsifiable_claim || ''));\n    if (p.reason || p.rationale) L.push('The Reason: ' + (p.reason || p.rationale));\n    if (p.main_risk) L.push('The Risk: ' + p.main_risk);\n    if (p.invalidation_rule) L.push('What Would Prove Us Wrong: ' + p.invalidation_rule);\n    L.push('Nothing traded. Reply APPROVE ' + r.experiment_id + ' to place the PAPER order, or REJECT ' + r.experiment_id + '.');\n  } else {\n    L.push('Arthur Voss: I could not turn this into a tradable experiment.');\n    if (p.clarification_question) L.push(p.clarification_question);\n    if (Array.isArray(r.validation_errors) && r.validation_errors.length) L.push('Issues: ' + r.validation_errors.join('; '));\n    L.push('No order possible. Text a revised thesis.');\n  }\n} else if (r.action === 'approve_trade') {\n  if (r.ok) L.push('PAPER order placed for ' + r.experiment_id + ': ' + r.symbol + ' $' + r.notional_usd + ', order ' + r.paper_order_id + ' (' + r.order_status + '). Fills next session if market closed.');\n  else L.push('Approval of ' + (r.experiment_id || req.experiment_id) + ' blocked. No order placed. ' + ((r.reasons || []).join('; ') || r.error || ''));\n} else if (r.action === 'reject') {\n  L.push(r.ok ? r.experiment_id + ' rejected. No order placed.' : 'Could not reject ' + (r.experiment_id || req.experiment_id) + '.');\n} else if (r.action === 'evaluate') {\n  if (r.ok && r.outcome) {\n    const o = r.outcome;\nconst VL = (v) => { const s = String(v || ''); const base = s.replace(/^interim_/, ''); const m = { supported: 'Held up', rejected: \"Didn't hold up\", inconclusive: 'Too close to call' }; return (s.indexOf('interim_') === 0 ? 'Early read: ' : '') + (m[base] || s); };\n    L.push(r.experiment_id + ' The Verdict: ' + (o.verdict_label || VL(o.verdict)));\n    L.push('Our pick ' + o.asset_return + ' vs benchmark ' + o.benchmark_return + ', ' + o.trading_days_elapsed + '/' + o.horizon_days + ' days');\n    L.push('Position still open. Text CLOSE ' + r.experiment_id + ' after the horizon (add EARLY to exit now).');\n  } else L.push('Could not evaluate ' + (r.experiment_id || req.experiment_id) + ': ' + (r.error || 'unknown error'));\n} else if (r.action === 'close_position') {\n  if (r.ok) L.push('PAPER position closed for ' + r.experiment_id + ': sold ' + r.qty + ' ' + r.symbol + ', order ' + r.sell_order_id + ' (' + r.sell_order_status + ').');\n  else L.push('Close of ' + (r.experiment_id || req.experiment_id) + ' blocked. Nothing sold. ' + ((r.reasons || []).join('; ') || r.error || ''));\n} else {\n  L.push('Unexpected ThesisLab response. Nothing was traded.');\n}\nlet text = L.join(LF);\nif (text.length > 1500) text = text.slice(0, 1450) + LF + '(truncated)';\nreturn { json: { to: src.from, from: src.twilio_number, reply_text: text } };"
+      }
+    },
+    {
+      "id": "29af7e35-73c0-4245-bfd7-f4a57f951491",
+      "name": "Text Reply",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $json.from }}",
+        "to": "={{ $json.to }}",
+        "toWhatsapp": false,
+        "message": "={{ $json.reply_text }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "K2G13GIab68a33Ok",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "e691895e-82ed-43b2-8e49-d468333e2a9b",
+      "name": "Ignore Text",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Incoming Text": {
+      "main": [
+        [
+          {
+            "node": "SMS Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Settings": {
+      "main": [
+        [
+          {
+            "node": "Parse Text Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Text Command": {
+      "main": [
+        [
+          {
+            "node": "Authorized Text?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized Text?": {
+      "main": [
+        [
+          {
+            "node": "Call ThesisLab API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call ThesisLab API": {
+      "main": [
+        [
+          {
+            "node": "Format Text Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Text Reply": {
+      "main": [
+        [
+          {
+            "node": "Text Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "vQi45xvLwVGwvsty"
+  },
+  "tags": []
+}
