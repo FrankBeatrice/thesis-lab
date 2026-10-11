@@ -1,0 +1,61 @@
+{
+  "id": "thesislab-errors",
+  "name": "ThesisLab - Error Alerts",
+  "active": true,
+  "nodes": [
+    {
+      "id": "1f5617f5-ed96-4f11-82db-b1e763e6dcdc",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "dcbe868f-ef55-4d84-bd2f-08fcea6b50a3",
+      "name": "Email Failure Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "[redacted-email]",
+        "subject": "=[ThesisLab ALERT] {{ $json.workflow.name }} failed",
+        "emailType": "text",
+        "message": "=A ThesisLab workflow failed.\n\nWorkflow: {{ $json.workflow.name }} ({{ $json.workflow.id }})\nFailed at node: {{ $json.execution.lastNodeExecuted || \"unknown\" }}\nError: {{ $json.execution.error ? $json.execution.error.message : \"unknown\" }}\nMode: {{ $json.execution.mode }}\nTime: {{ $now.setZone(\"America/New_York\").toFormat(\"yyyy-MM-dd HH:mm ZZZZ\") }}\nExecution: {{ $json.execution.url || $json.execution.id }}\n\nThesisLab fails closed: check the experiments table and Alpaca paper account before retrying any trade action.",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "ThesisLab Monitor"
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "lgjd7A8fiXBGF9zx",
+          "name": "Gmail account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Email Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "tags": []
+}
