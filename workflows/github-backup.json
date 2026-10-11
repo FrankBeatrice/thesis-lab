@@ -1,0 +1,307 @@
+{
+  "id": "w9B0BO22xUI7hFBD",
+  "name": "ThesisLab - GitHub Backup",
+  "active": false,
+  "nodes": [
+    {
+      "id": "40f815c6-a875-4251-b24a-221396487d65",
+      "name": "Sync Now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e55a5d32-abb3-4a8f-9bef-8fa01f4ec37f",
+      "name": "Get All Workflows",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "resource": "workflow",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "activeWorkflows": false,
+          "excludePinnedData": true
+        }
+      }
+    },
+    {
+      "id": "e81d5d1e-5ab0-442d-8936-586fd48d563a",
+      "name": "Load Experiment Records",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "returnAll": true,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "ASC"
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "df063c6c-eed8-42ca-83c2-f2fd8deb7ba5",
+      "name": "Build Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const wfs = $('Get All Workflows').all().map(i => i.json).filter(w => /^ThesisLab/i.test(String(w.name || '')));\nconst rows = $('Load Experiment Records').all().map(i => i.json).filter(r => r && r.experiment_id);\nconst stamp = $now.setZone('America/New_York').toFormat('yyyy-MM-dd HH:mm') + ' ET';\n\nfunction slug(name) {\n  return String(name).replace(/^ThesisLab\\s*-\\s*/i, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'workflow';\n}\nfunction cleanText(s) {\n  let t = String(s || '');\n  const cut = t.search(/\\n\\s*--|\\n\\s*(Best|Thanks|Regards|Cheers|Sent from)\\b/i);\n  if (cut > 0) t = t.slice(0, cut);\n  t = t.replace(/\\+?\\d[\\d\\s().-]{8,}\\d/g, '[phone removed]');\n  return t.trim();\n}\nfunction b64(s) { return Buffer.from(s, 'utf8').toString('base64'); }\n\nconst files = [];\nconst list = [];\nfor (const w of wfs) {\n  const clean = {\n    id: w.id,\n    name: w.name,\n    active: !!w.active,\n    nodes: w.nodes || [],\n    connections: w.connections || {},\n    settings: w.settings || {},\n    tags: w.tags || [],\n    updatedAt: w.updatedAt,\n  };\n  const path = 'workflows/' + slug(w.name) + '.json';\n  files.push({ path, content: JSON.stringify(clean, null, 2) + '\\n' });\n  list.push('| ' + w.name + ' | ' + (w.active ? 'Published' : 'Draft') + ' | [' + path + '](' + path + ') |');\n}\n\nconst records = rows.map(r => {\n  const o = Object.assign({}, r);\n  o.thesis = cleanText(o.thesis);\n  return o;\n});\nfiles.push({ path: 'data/thesislab_experiments.json', content: JSON.stringify(records, null, 2) + '\\n' });\n\nconst cols = [];\nfor (const r of records) for (const k of Object.keys(r)) if (cols.indexOf(k) < 0) cols.push(k);\nconst q = v => {\n  const s = v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));\n  return '\"' + s.replace(/\"/g, '\"\"') + '\"';\n};\nconst csv = [cols.map(q).join(',')].concat(records.map(r => cols.map(c => q(r[c])).join(','))).join('\\n') + '\\n';\nfiles.push({ path: 'data/thesislab_experiments.csv', content: csv });\n\nconst schema = {\n  table: 'thesislab_experiments',\n  columns: [\n    ['experiment_id', 'string'], ['status', 'string'], ['thesis', 'string'], ['asset', 'string'],\n    ['benchmark', 'string'], ['direction', 'string'], ['horizon_days', 'number'], ['falsifiable_claim', 'string'],\n    ['strategy_json', 'string'], ['notional_usd', 'number'], ['order_id', 'string'], ['order_status', 'string'],\n    ['proposed_at', 'date'], ['decided_at', 'date'], ['outcome', 'string'], ['last_error', 'string'],\n    ['close_order_id', 'string'], ['closed_at', 'date'],\n  ].map(c => ({ name: c[0], type: c[1] })),\n};\nfiles.push({ path: 'data/schema.json', content: JSON.stringify(schema, null, 2) + '\\n' });\n\nconst readme = [\n  '# ThesisLab',\n  '',\n  'Every thesis is a falsifiable experiment. Paper trading only.',\n  '',\n  'ThesisLab turns a plain-English investment thesis into a testable paper-trading experiment, built in n8n for NYU Stern OPMG-UB 30-001 (Foundations of AI Agents).',\n  'Arthur Voss, a fictional old-school Wall Street researcher (disciplined, skeptical, evidence-driven, slightly contrarian), is the research partner. The character affects tone only; it never overrides safety rules or data requirements.',\n  '',\n  '## Guardrails',\n  '- Alpaca **paper** trading only. No live endpoint, no live credentials.',\n  '- No order without explicit human approval (APPROVE <experiment id>).',\n  '- V1 is long-only U.S. equities. No options, leverage, shorts, or crypto.',\n  '- Prices, fills and results come only from tools. Nothing is invented.',\n  '- Failures fail closed and alert the owner.',\n  '',\n  '## Workflows',\n  '| Workflow | State | File |',\n  '|---|---|---|',\n].concat(list).concat([\n  '',\n  '## Data',\n  '- data/thesislab_experiments.json and .csv: every thesis, bet, order status and verdict (email signatures and phone numbers stripped).',\n  '- data/schema.json: column definitions for the n8n data table.',\n  '',\n  '## Restoring',\n  'In n8n, create a workflow, open the menu, choose Import from File and pick a file from workflows/. Credentials are referenced by name only; reconnect your own Alpaca (paper), OpenAI, Pinecone, Gmail, Telegram and Twilio accounts after import. No API keys are stored in this repository.',\n  '',\n  '_Last synced ' + stamp + ' by the ThesisLab - GitHub Backup workflow._',\n  '',\n]).join('\\n');\nfiles.unshift({ path: 'README.md', content: readme });\n\nreturn files.map(f => ({ json: { path: f.path, b64: b64(f.content), bytes: f.content.length, synced_at: stamp } }));"
+      }
+    },
+    {
+      "id": "961776b7-612f-470b-9a4d-9986d03d9bad",
+      "name": "Get Existing File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/FrankBeatrice/thesis-lab/contents/{{ $json.path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "hChJPxfZBPrAfSpI",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "id": "31651d7a-3bb0-4d19-b38d-3da88d0a3b43",
+      "name": "Compare With Repo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const built = $('Build Files').all().map(i => i.json);\nconst remote = $input.all().map(i => i.json || {});\nreturn built.map((f, idx) => {\n  const r = remote[idx] || {};\n  const sha = typeof r.sha === 'string' ? r.sha : '';\n  const current = String(r.content || '').replace(/\\n/g, '');\n  return { json: { path: f.path, b64: f.b64, synced_at: f.synced_at, sha, changed: current !== f.b64 } };\n});"
+      }
+    },
+    {
+      "id": "88fa0093-bead-44d0-bc50-2d5ad5192218",
+      "name": "Changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "changed",
+              "leftValue": "={{ $json.changed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f60a0149-4d46-469b-b0dc-62ef81cde06b",
+      "name": "Commit File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        300
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.github.com/repos/FrankBeatrice/thesis-lab/contents/{{ $json.path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ message: 'ThesisLab sync: ' + $json.path + ' (' + $json.synced_at + ')', content: $json.b64 }, $json.sha ? { sha: $json.sha } : {})) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 700
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "hChJPxfZBPrAfSpI",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "id": "2b024a56-38e9-475f-97a0-482d032a3385",
+      "name": "Unchanged",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        450
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Sync Now": {
+      "main": [
+        [
+          {
+            "node": "Get All Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Workflows": {
+      "main": [
+        [
+          {
+            "node": "Load Experiment Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Experiment Records": {
+      "main": [
+        [
+          {
+            "node": "Build Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Files": {
+      "main": [
+        [
+          {
+            "node": "Get Existing File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing File": {
+      "main": [
+        [
+          {
+            "node": "Compare With Repo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare With Repo": {
+      "main": [
+        [
+          {
+            "node": "Changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Changed?": {
+      "main": [
+        [
+          {
+            "node": "Commit File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unchanged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York",
+    "errorWorkflow": "vQi45xvLwVGwvsty"
+  },
+  "tags": []
+}
