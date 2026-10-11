@@ -1,0 +1,224 @@
+{
+  "id": "D6taAaNKMBxXZcSE",
+  "name": "ThesisLab - Live Board",
+  "active": true,
+  "nodes": [
+    {
+      "id": "2029e34e-d405-409c-a295-84af489f2a63",
+      "name": "Board Page",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "thesislab-board",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "b0945cd5-c4ac-45ca-987f-efd7fbb835fd"
+    },
+    {
+      "id": "824656d1-3495-47be-9c4d-0971d8d917cd",
+      "name": "Load Experiments",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "anyCondition",
+        "filters": {},
+        "returnAll": true,
+        "orderBy": true,
+        "orderByColumn": "createdAt",
+        "orderByDirection": "DESC"
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "70d64d1d-30b4-413e-b83a-6e409f5614b7",
+      "name": "Collect Symbols",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r && r.experiment_id);\nconst syms = new Set(['SPY']);\nlet earliest = Date.now();\nfor (const r of rows) {\n  if (r.asset) syms.add(String(r.asset).toUpperCase());\n  if (r.benchmark) syms.add(String(r.benchmark).toUpperCase());\n  const t = Date.parse(r.decided_at || r.proposed_at || r.createdAt || '');\n  if (!isNaN(t) && t < earliest) earliest = t;\n}\nconst floor = Date.now() - 365 * 86400000;\nconst start = new Date(Math.max(floor, earliest - 60 * 86400000)).toISOString().slice(0, 10);\nreturn [{ json: { symbols: Array.from(syms).join(','), start: start, count: rows.length } }];"
+      }
+    },
+    {
+      "id": "7d58602f-96cd-44b2-95fc-79d79bf75bdf",
+      "name": "Fetch Price History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://data.alpaca.markets/v2/stocks/bars",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbols",
+              "value": "={{ $json.symbols }}"
+            },
+            {
+              "name": "start",
+              "value": "={{ $json.start }}"
+            },
+            {
+              "name": "timeframe",
+              "value": "1Day"
+            },
+            {
+              "name": "adjustment",
+              "value": "all"
+            },
+            {
+              "name": "feed",
+              "value": "iex"
+            },
+            {
+              "name": "limit",
+              "value": "10000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "5lpeshXEYcFYKdIo",
+          "name": "Alpaca Paper API (Frank B)"
+        }
+      },
+      "executeOnce": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "62146aae-bd31-4455-afb3-ca5781b37079",
+      "name": "Render Board",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $('Load Experiments').all().map(i => i.json).filter(r => r && r.experiment_id);\nconst resp = $input.first().json || {};\nconst bars = resp.bars || {};\nconst priceError = !resp.bars;\n\nfunction esc(s) {\n  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n}\nfunction pct(x) {\n  if (x == null || isNaN(x)) return 'n/a';\n  return (x >= 0 ? '+' : '') + (x * 100).toFixed(2) + '%';\n}\nfunction money(x) {\n  const n = Number(x);\n  if (!n) return '$0';\n  return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });\n}\nfunction day(s) {\n  if (!s) return '';\n  const t = Date.parse(s);\n  if (isNaN(t)) return '';\n  return new Date(t).toISOString().slice(0, 10);\n}\nfunction cleanThesis(s) {\n  let t = String(s || '');\n  const cut = t.search(/\\n\\s*--|\\n\\s*(Best|Thanks|Regards|Cheers|Sent from)\\b/i);\n  if (cut > 0) t = t.slice(0, cut);\n  return t.replace(/\\s+/g, ' ').trim();\n}\nfunction series(sym) {\n  return (bars[sym] || []).map(b => ({ d: String(b.t).slice(0, 10), c: Number(b.c) })).filter(b => b.c > 0);\n}\n\nfunction verdictLabel(v) {\n  const s = String(v || '');\n  const early = s.indexOf('interim_') === 0;\n  const base = early ? s.slice(8) : s;\n  const m = { supported: 'Held up', rejected: \"Didn't hold up\", inconclusive: 'Too close to call' };\n  return m[base] ? (early ? 'Early read: ' : '') + m[base] : s;\n}\nfunction row(label, text) {\n  return text ? '<p class=\"claim\"><b>' + label + ':</b> ' + esc(text) + '</p>' : '';\n}\n\nconst COLORS = { proposed: '#f5b942', approved: '#3ddc97', evaluated: '#5aa9ff', closed: '#9b8cff', rejected: '#ff6b6b' };\n\nfunction chart(a, b, startDay, assetSym, benchSym) {\n  if (!a.length || !b.length) return '<div class=\"nochart\">No price data available</div>';\n  const bMap = {};\n  for (const x of b) bMap[x.d] = x.c;\n  const pts = a.filter(x => bMap[x.d] != null).map(x => ({ d: x.d, a: x.c, b: bMap[x.d] }));\n  if (pts.length < 2) return '<div class=\"nochart\">Not enough overlapping price data</div>';\n  let si = 0;\n  for (let i = 0; i < pts.length; i++) { if (pts[i].d <= startDay) si = i; }\n  const from = Math.max(0, si - 40);\n  const view = pts.slice(from);\n  const s0 = pts[si];\n  const ra = view.map(p => p.a / s0.a - 1);\n  const rb = view.map(p => p.b / s0.b - 1);\n  const all = ra.concat(rb, [0]);\n  let lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);\n  if (hi - lo < 0.02) { hi += 0.01; lo -= 0.01; }\n  const W = 560, H = 190, P = 28;\n  const n = view.length;\n  const X = i => P + (n === 1 ? 0 : (i * (W - 2 * P)) / (n - 1));\n  const Y = v => H - P - ((v - lo) * (H - 2 * P)) / (hi - lo);\n  const path = arr => arr.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(v).toFixed(1)).join(' ');\n  const mi = si - from;\n  const area = path(ra) + ' L' + X(n - 1).toFixed(1) + ',' + Y(0).toFixed(1) + ' L' + X(0).toFixed(1) + ',' + Y(0).toFixed(1) + ' Z';\n  let svg = '<svg viewBox=\"0 0 ' + W + ' ' + H + '\" class=\"chart\">';\n  svg += '<line x1=\"' + P + '\" x2=\"' + (W - P) + '\" y1=\"' + Y(0) + '\" y2=\"' + Y(0) + '\" class=\"zero\"/>';\n  svg += '<path d=\"' + area + '\" class=\"area\"/>';\n  svg += '<path d=\"' + path(rb) + '\" class=\"bench\"/>';\n  svg += '<path d=\"' + path(ra) + '\" class=\"asset\"/>';\n  svg += '<line x1=\"' + X(mi) + '\" x2=\"' + X(mi) + '\" y1=\"' + (P - 8) + '\" y2=\"' + (H - P) + '\" class=\"marker\"/>';\n  svg += '<text x=\"' + (X(mi) + 4) + '\" y=\"' + (P - 10) + '\" class=\"lbl\">bet placed</text>';\n  svg += '<circle cx=\"' + X(n - 1) + '\" cy=\"' + Y(ra[n - 1]) + '\" r=\"4\" class=\"dot\"/>';\n  svg += '<text x=\"' + (W - P) + '\" y=\"' + (H - 6) + '\" class=\"lbl\" text-anchor=\"end\">' + esc(view[n - 1].d) + '</text>';\n  svg += '<text x=\"' + P + '\" y=\"' + (H - 6) + '\" class=\"lbl\">' + esc(view[0].d) + '</text>';\n  svg += '<text x=\"4\" y=\"' + (Y(hi) + 4) + '\" class=\"lbl\">' + pct(hi) + '</text>';\n  svg += '<text x=\"4\" y=\"' + (Y(lo) + 4) + '\" class=\"lbl\">' + pct(lo) + '</text>';\n  svg += '</svg>';\n  const last = pts[pts.length - 1];\n  return {\n    svg: svg,\n    assetRet: last.a / s0.a - 1,\n    benchRet: last.b / s0.b - 1,\n    elapsed: pts.length - 1 - si,\n    asOf: last.d,\n    legend: '<div class=\"legend\"><span class=\"la\">' + esc(assetSym) + '</span><span class=\"lb\">' + esc(benchSym) + '</span><span class=\"muted\">return rebased to the bet date</span></div>',\n  };\n}\n\nlet active = 0, proposed = 0, done = 0, rejected = 0, deployed = 0;\nconst cards = [];\nfor (const r of rows) {\n  const st = String(r.status || 'proposed').toLowerCase();\n  if (st === 'approved') { active++; deployed += Number(r.notional_usd) || 0; }\n  else if (st === 'proposed') proposed++;\n  else if (st === 'rejected') rejected++;\n  else done++;\n  const asset = String(r.asset || '').toUpperCase();\n  const bench = String(r.benchmark || 'SPY').toUpperCase();\n  const startDay = day(r.decided_at) || day(r.proposed_at) || day(r.createdAt);\n  const c = chart(series(asset), series(bench), startDay, asset, bench);\n  let verdict = '';\n  if (r.outcome) {\n    try { const o = JSON.parse(r.outcome); verdict = o.verdict_label || verdictLabel(o.verdict); } catch (e) { verdict = ''; }\n  }\n  let sj = {};\n  try { sj = JSON.parse(r.strategy_json || '{}') || {}; } catch (e) { sj = {}; }\n  const risks = Array.isArray(sj.risk_warnings) ? sj.risk_warnings : [];\n  const shortText = (t) => { const parts = String(t || '').match(/[^.!?]+[.!?]+/g) || [String(t || '')]; return parts.slice(0, 2).join(' ').trim(); };\n  const reason = sj.reason || shortText(sj.rationale);\n  const realRisks = risks.filter(x => !/paper trading|no live/i.test(String(x)));\n  const risk = sj.main_risk || realRisks[0] || '';\n  const claimText = String(r.falsifiable_claim || '');\n  const measuredInline = /close-to-close/i.test(claimText);\n  const wrong = sj.invalidation_rule || '';\n  const color = COLORS[st] || '#aaa';\n  let stats = '';\n  let svg = typeof c === 'string' ? c : c.svg;\n  if (typeof c !== 'string') {\n    const alpha = c.assetRet - c.benchRet;\n    const horizon = Number(r.horizon_days) || 0;\n    const prog = horizon ? Math.min(1, Math.max(0, c.elapsed / horizon)) : 0;\n    const winning = alpha >= 0;\n    const tag = st === 'proposed' ? 'hypothetical since proposal' : 'since entry';\n    stats += '<div class=\"stats\">';\n    stats += '<div><div class=\"k\">' + esc(asset) + '</div><div class=\"v\">' + pct(c.assetRet) + '</div></div>';\n    stats += '<div><div class=\"k\">' + esc(bench) + '</div><div class=\"v\">' + pct(c.benchRet) + '</div></div>';\n    stats += '<div><div class=\"k\">Edge vs benchmark</div><div class=\"v ' + (winning ? 'up' : 'down') + '\">' + pct(alpha) + '</div></div>';\n    stats += '<div><div class=\"k\">Paper size</div><div class=\"v\">' + money(r.notional_usd) + '</div></div>';\n    stats += '</div>';\n    stats += '<div class=\"muted small\">' + tag + ', as of close ' + esc(c.asOf) + '</div>';\n    if (horizon) {\n      stats += '<div class=\"prog\"><div class=\"bar\" style=\"width:' + (prog * 100).toFixed(0) + '%;background:' + color + '\"></div></div>';\n      stats += '<div class=\"muted small\">' + Math.min(c.elapsed, horizon) + ' of ' + horizon + ' trading days</div>';\n    }\n    svg = c.legend + svg;\n  }\n  let card = '<article class=\"card\" style=\"--c:' + color + '\">';\n  card += '<header><div><span class=\"tick\">' + esc(asset) + '</span><span class=\"vs\"> vs ' + esc(bench) + '</span></div>';\n  card += '<span class=\"pill\">' + esc(st) + (verdict ? ' &middot; ' + esc(verdict) : '') + '</span></header>';\n  card += '<p class=\"thesis\">&ldquo;' + esc(cleanThesis(r.thesis)) + '&rdquo;</p>';\n  card += svg + stats;\n  card += '<div class=\"bet\">';\n  card += row('The Bet', r.falsifiable_claim);\n  if (!measuredInline) card += '<p class=\"muted small\">Measured by close-to-close total return.</p>';\n  card += row('The Reason', reason);\n  card += row('The Risk', risk);\n  card += row('What Would Prove Us Wrong', wrong);\n  card += row('The Verdict', verdict || (st === 'rejected' ? 'Not pursued' : 'Pending, the test is still running'));\n  card += '</div>';\n  card += '<footer><span>' + esc(r.experiment_id) + '</span><span>proposed ' + esc(day(r.proposed_at)) + '</span></footer>';\n  card += '</article>';\n  cards.push(card);\n}\n\nconst updated = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' });\nconst css = 'body{margin:0;background:#0b0f17;color:#e6e9ef;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}'\n + '.wrap{max-width:1280px;margin:0 auto;padding:32px 24px}'\n + 'h1{margin:0;font-size:30px;letter-spacing:-0.5px}h1 span{color:#3ddc97}'\n + '.sub{color:#8a93a6;margin:6px 0 24px}'\n + '.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:28px}'\n + '.kpi{background:#121826;border:1px solid #1f2738;border-radius:14px;padding:16px}.kpi .n{font-size:26px;font-weight:700}.kpi .l{color:#8a93a6;font-size:12px;text-transform:uppercase;letter-spacing:1px}'\n + '.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(560px,1fr));gap:18px}'\n + '.card{background:linear-gradient(180deg,#131a2a,#0f1420);border:1px solid #1f2738;border-top:3px solid var(--c);border-radius:16px;padding:18px 20px}'\n + '.card header{display:flex;justify-content:space-between;align-items:center}'\n + '.tick{font-size:24px;font-weight:800}.vs{color:#8a93a6}'\n + '.pill{background:color-mix(in srgb,var(--c) 18%,transparent);color:var(--c);padding:4px 10px;border-radius:99px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}'\n + '.thesis{font-size:16px;color:#cfd5e1;margin:10px 0}'\n + '.chart{width:100%;height:auto}.zero{stroke:#2a3346;stroke-dasharray:4 4}.asset{fill:none;stroke:var(--c);stroke-width:2.5}.bench{fill:none;stroke:#6b7489;stroke-width:1.8;stroke-dasharray:5 3}'\n + '.area{fill:var(--c);opacity:.08}.marker{stroke:#e6e9ef;stroke-opacity:.35;stroke-dasharray:2 3}.dot{fill:var(--c)}.lbl{fill:#6b7489;font-size:10px}'\n + '.legend{display:flex;gap:14px;font-size:12px;margin-top:6px}.la{color:var(--c);font-weight:700;border-bottom:3px solid var(--c)}.lb{color:#8a93a6;border-bottom:2px dashed #6b7489}'\n + '.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px}.k{color:#8a93a6;font-size:11px;text-transform:uppercase}.v{font-size:18px;font-weight:700}.up{color:#3ddc97}.down{color:#ff6b6b}'\n + '.prog{height:6px;background:#1f2738;border-radius:9px;margin:10px 0 4px;overflow:hidden}.bar{height:100%}'\n + '.claim{font-size:13px;color:#aab2c3;margin:6px 0}.claim b{color:#e6e9ef}.bet{margin:12px 0 8px}.muted{color:#6b7489}.small{font-size:12px}'\n + '.card footer{display:flex;justify-content:space-between;color:#6b7489;font-size:12px;border-top:1px solid #1f2738;padding-top:8px}'\n + '.nochart{padding:40px;text-align:center;color:#6b7489;border:1px dashed #1f2738;border-radius:10px;margin:10px 0}'\n + '.warn{background:#3a2a10;color:#f5b942;padding:10px 14px;border-radius:10px;margin-bottom:16px}'\n + '.empty{padding:60px;text-align:center;color:#8a93a6}'\n + '@media(max-width:700px){.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}';\n\nlet html = '<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">';\nhtml += '<meta http-equiv=\"refresh\" content=\"60\"><title>ThesisLab Board</title><style>' + css + '</style></head><body><div class=\"wrap\">';\nhtml += '<h1>ThesisLab <span>Board</span></h1>';\nhtml += '<div class=\"sub\">Every thesis is a falsifiable experiment. Paper trading only. Updated ' + esc(updated) + ' ET, refreshes every 60s.</div>';\nif (priceError) html += '<div class=\"warn\">Market data is unavailable right now, so charts are hidden. No prices are shown rather than guessed.</div>';\nhtml += '<div class=\"kpis\">';\nhtml += '<div class=\"kpi\"><div class=\"n\">' + rows.length + '</div><div class=\"l\">Theses</div></div>';\nhtml += '<div class=\"kpi\"><div class=\"n\" style=\"color:#3ddc97\">' + active + '</div><div class=\"l\">Live bets</div></div>';\nhtml += '<div class=\"kpi\"><div class=\"n\" style=\"color:#f5b942\">' + proposed + '</div><div class=\"l\">Awaiting approval</div></div>';\nhtml += '<div class=\"kpi\"><div class=\"n\" style=\"color:#9b8cff\">' + done + '</div><div class=\"l\">Evaluated / closed</div></div>';\nhtml += '<div class=\"kpi\"><div class=\"n\">' + money(deployed) + '</div><div class=\"l\">Paper capital at work</div></div>';\nhtml += '</div>';\nhtml += cards.length ? '<div class=\"grid\">' + cards.join('') + '</div>' : '<div class=\"empty\">No theses yet. Send one to Arthur by email or Telegram.</div>';\nhtml += '</div></body></html>';\nreturn [{ json: { html: html } }];"
+      }
+    },
+    {
+      "id": "7d2c3066-dd67-4dcc-adbc-03e537c05057",
+      "name": "Serve Page",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Board Page": {
+      "main": [
+        [
+          {
+            "node": "Load Experiments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Experiments": {
+      "main": [
+        [
+          {
+            "node": "Collect Symbols",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Symbols": {
+      "main": [
+        [
+          {
+            "node": "Fetch Price History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Price History": {
+      "main": [
+        [
+          {
+            "node": "Render Board",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Board": {
+      "main": [
+        [
+          {
+            "node": "Serve Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "vQi45xvLwVGwvsty"
+  },
+  "tags": []
+}
