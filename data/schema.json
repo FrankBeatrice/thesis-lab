@@ -1,0 +1,77 @@
+{
+  "table": "thesislab_experiments",
+  "columns": [
+    {
+      "name": "experiment_id",
+      "type": "string"
+    },
+    {
+      "name": "status",
+      "type": "string"
+    },
+    {
+      "name": "thesis",
+      "type": "string"
+    },
+    {
+      "name": "asset",
+      "type": "string"
+    },
+    {
+      "name": "benchmark",
+      "type": "string"
+    },
+    {
+      "name": "direction",
+      "type": "string"
+    },
+    {
+      "name": "horizon_days",
+      "type": "number"
+    },
+    {
+      "name": "falsifiable_claim",
+      "type": "string"
+    },
+    {
+      "name": "strategy_json",
+      "type": "string"
+    },
+    {
+      "name": "notional_usd",
+      "type": "number"
+    },
+    {
+      "name": "order_id",
+      "type": "string"
+    },
+    {
+      "name": "order_status",
+      "type": "string"
+    },
+    {
+      "name": "proposed_at",
+      "type": "date"
+    },
+    {
+      "name": "decided_at",
+      "type": "date"
+    },
+    {
+      "name": "outcome",
+      "type": "string"
+    },
+    {
+      "name": "last_error",
+      "type": "string"
+    },
+    {
+      "name": "close_order_id",
+      "type": "string"
+    },
+    {
+      "name": "closed_at",
+      "type": "date"
+    }
+  ]
+}
