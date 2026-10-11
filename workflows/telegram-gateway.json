@@ -1,0 +1,305 @@
+{
+  "id": "eUdaJb15oTUl2rJs",
+  "name": "ThesisLab - Telegram Gateway",
+  "active": true,
+  "nodes": [
+    {
+      "id": "10df85b2-5c48-4e4f-92c1-1f7fe4db2e83",
+      "name": "Incoming Telegram Message",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "fLsr0sj8KfRWtIdX",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "db5ba89f-98ae-4bdf-ad73-f23e757f4dfc",
+      "name": "Telegram Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g1",
+              "name": "allowed_user_ids",
+              "value": "[redacted-telegram-id],[redacted-username]",
+              "type": "string"
+            },
+            {
+              "id": "g2",
+              "name": "api_url",
+              "value": "https://franki3.app.n8n.cloud/webhook/thesislab",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1150b490-fc0d-4232-a0b7-c680b629ebe7",
+      "name": "Parse Telegram Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const msg = $json.message || {};\nconst LF = String.fromCharCode(10);\nconst userId = String((msg.from && msg.from.id) || '');\nconst chatId = String((msg.chat && msg.chat.id) || '');\nconst isPrivate = !!msg.chat && msg.chat.type === 'private';\nconst isBot = !!(msg.from && msg.from.is_bot);\nconst username = String((msg.from && msg.from.username) || '').toLowerCase();\nconst allowed = String($json.allowed_user_ids || '').toLowerCase().split(/[,;\\s]+/).map((s) => s.replace(/^@/, '')).filter(Boolean);\nconst text = String(msg.text || '').trim();\nconst allowedSender = isPrivate && !isBot && userId !== '' && (allowed.includes(userId) || (username !== '' && allowed.includes(username)));\n\nlet mode = 'ignore';\nlet request = {};\nlet reply_text = '';\nconst help = [\n  'Arthur Voss (ThesisLab, paper trading only).',\n  'Send an investment thesis in plain English, e.g. \"MSFT beats SPY over 20 days $500\".',\n  'Commands: APPROVE <id>, REJECT <id>, EVALUATE <id>, CLOSE <id> [EARLY].',\n].join(LF);\n\nif (/^\\/(myid|id)\\b/i.test(text) && isPrivate) {\n  mode = 'reply_only';\n  reply_text = 'Your Telegram user ID is ' + userId + (username ? ' (username @' + username + ')' : '') + '.' + (allowedSender ? ' You are authorized.' : ' You are not authorized yet; ask the owner to add this ID.');\n} else if (allowedSender) {\n  const cmd = text.match(/^\\s*\\/?(APPROVE|REJECT|EVALUATE|CLOSE)\\s+(TL-[A-Z0-9-]+)(\\s+EARLY)?/i);\n  if (/^\\/(start|help)\\b/i.test(text)) {\n    mode = 'reply_only';\n    reply_text = help;\n  } else if (cmd) {\n    const verb = cmd[1].toUpperCase();\n    const id = cmd[2].toUpperCase();\n    if (verb === 'APPROVE') request = { action: 'approve_trade', experiment_id: id, confirm: true };\n    if (verb === 'REJECT') request = { action: 'reject', experiment_id: id };\n    if (verb === 'EVALUATE') request = { action: 'evaluate', experiment_id: id };\n    if (verb === 'CLOSE') request = { action: 'close_position', experiment_id: id, confirm: true, early_exit: !!cmd[3] };\n    mode = 'api';\n  } else if (text.length >= 10) {\n    const amt = text.match(/\\$\\s?([0-9][0-9,]*)/);\n    request = { action: 'analyze', thesis: text.slice(0, 4000), notional_usd: amt ? Number(amt[1].replace(/,/g, '')) : 0 };\n    mode = 'api';\n  } else {\n    mode = 'reply_only';\n    reply_text = help;\n  }\n}\n\nreturn { json: { mode, user_id: userId, chat_id: chatId, request, reply_text, api_url: $json.api_url } };"
+      }
+    },
+    {
+      "id": "591ddcfa-86a9-42d8-b2ff-eeb11d5ea570",
+      "name": "Route Message",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "renameOutput": true,
+              "outputKey": "api",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "api",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "reply_only",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "reply_only",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "ignore"
+        }
+      }
+    },
+    {
+      "id": "f9e7e3eb-fc6b-44d5-a6a6-d8fe41f8ee94",
+      "name": "Call ThesisLab API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.api_url }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "77eaab6e-0f78-4183-8209-8e6cdb6607f7",
+      "name": "Format Telegram Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $json || {};\nconst src = $('Parse Telegram Command').item.json;\nconst req = src.request || {};\nconst LF = String.fromCharCode(10);\nconst L = [];\nconst p = r.proposal || {};\nif (!r || Object.keys(r).length === 0 || (r.ok === undefined && !r.action)) {\n  L.push('ThesisLab could not process this right now. Nothing was traded.');\n} else if (r.action === 'analyze') {\n  if ((r.status === 'proposed' || r.status === 'proposal') && r.experiment_id) {\n    L.push('Arthur Voss: experiment ' + r.experiment_id, '');\n    L.push((p.asset || '?') + ' vs ' + (p.benchmark || '?') + ', ' + (p.horizon_days || '?') + ' trading days, $' + r.notional_usd + ' paper' + (r.allocation_capped ? ' (capped by policy)' : ''));\n    const risks = Array.isArray(p.risk_warnings) ? p.risk_warnings : [];\n    if (p.plain_idea) L.push('', 'The Idea: ' + p.plain_idea);\n    L.push('', 'The Bet: ' + (p.falsifiable_claim || '') + ' (measured by close-to-close total return)');\n    if (p.reason || p.rationale) L.push('', 'The Reason: ' + (p.reason || p.rationale));\n    if (p.main_risk || risks.length) L.push('', 'The Risk: ' + (p.main_risk || risks.join('; ')));\n    if (p.invalidation_rule) L.push('', 'What Would Prove Us Wrong: ' + p.invalidation_rule);\n    if (p.entry_rule) L.push('', 'Get in: ' + p.entry_rule);\n    if (p.exit_rule) L.push('Get out: ' + p.exit_rule);\n    L.push('', 'Nothing traded. Send APPROVE ' + r.experiment_id + ' to place the PAPER order, or REJECT ' + r.experiment_id + '.');\n  } else {\n    L.push('Arthur Voss: I could not turn this into a tradable experiment.');\n    if (p.clarification_question) L.push(p.clarification_question);\n    if (Array.isArray(r.validation_errors) && r.validation_errors.length) L.push('Issues: ' + r.validation_errors.join('; '));\n    L.push('No order possible. Send a revised thesis.');\n  }\n} else if (r.action === 'approve_trade') {\n  if (r.ok) L.push('PAPER order placed for ' + r.experiment_id + ': ' + r.symbol + ' $' + r.notional_usd + ', order ' + r.paper_order_id + ' (' + r.order_status + '). Fills next session if the market is closed.', 'Later: EVALUATE ' + r.experiment_id + ' or CLOSE ' + r.experiment_id + '.');\n  else L.push('Approval of ' + (r.experiment_id || req.experiment_id) + ' blocked. No order placed. ' + ((r.reasons || []).join('; ') || r.error || ''));\n} else if (r.action === 'reject') {\n  L.push(r.ok ? r.experiment_id + ' rejected. No order placed.' : 'Could not reject ' + (r.experiment_id || req.experiment_id) + ': not found or no longer pending.');\n} else if (r.action === 'evaluate') {\n  if (r.ok && r.outcome) {\n    const o = r.outcome;\nconst VL = (v) => { const s = String(v || ''); const base = s.replace(/^interim_/, ''); const m = { supported: 'Held up', rejected: \"Didn't hold up\", inconclusive: 'Too close to call' }; return (s.indexOf('interim_') === 0 ? 'Early read: ' : '') + (m[base] || s); };\n    L.push('Results ' + r.experiment_id + ':');\n    L.push('The Verdict: ' + (o.verdict_label || VL(o.verdict)));\n    L.push('Our pick ' + o.asset_return + ' vs benchmark ' + o.benchmark_return + ' (difference ' + o.alpha + ')');\n    L.push(o.trading_days_elapsed + ' of ' + o.horizon_days + ' trading days' + (o.horizon_complete ? ', test complete' : ''));\n    L.push('', 'Position still open. Send CLOSE ' + r.experiment_id + ' after the horizon (add EARLY to exit now).');\n  } else L.push('Could not evaluate ' + (r.experiment_id || req.experiment_id) + ': ' + (r.error || 'unknown error'));\n} else if (r.action === 'close_position') {\n  if (r.ok) L.push('PAPER position closed for ' + r.experiment_id + ': sold ' + r.qty + ' ' + r.symbol + ', order ' + r.sell_order_id + ' (' + r.sell_order_status + ').');\n  else L.push('Close of ' + (r.experiment_id || req.experiment_id) + ' blocked. Nothing sold. ' + ((r.reasons || []).join('; ') || r.error || ''));\n} else {\n  L.push('Unexpected ThesisLab response. Nothing was traded.');\n}\nlet text = L.join(LF);\nif (text.length > 3800) text = text.slice(0, 3750) + LF + '(truncated)';\nreturn { json: { chat_id: src.chat_id, reply_text: text } };"
+      }
+    },
+    {
+      "id": "69167374-81fe-4e58-b6a9-81de1b998e3e",
+      "name": "Send Telegram Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.reply_text.replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\") }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "fLsr0sj8KfRWtIdX",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "796ec9ee-f75a-4d6f-a2ba-107e32004ad7",
+      "name": "Ignore Message",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        900,
+        600
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Incoming Telegram Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Settings": {
+      "main": [
+        [
+          {
+            "node": "Parse Telegram Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Telegram Command": {
+      "main": [
+        [
+          {
+            "node": "Route Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Message": {
+      "main": [
+        [
+          {
+            "node": "Call ThesisLab API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Telegram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call ThesisLab API": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Telegram Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "vQi45xvLwVGwvsty"
+  },
+  "tags": []
+}
