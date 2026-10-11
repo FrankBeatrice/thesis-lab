@@ -1,0 +1,320 @@
+{
+  "id": "GjditbRBGDMPa62d",
+  "name": "ThesisLab - Email Gateway",
+  "active": true,
+  "nodes": [
+    {
+      "id": "a0934006-2d92-463d-8ea7-b1a1c8ef597f",
+      "name": "Agent Inbox",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "event": "messageReceived",
+        "simple": false,
+        "maxResults": 5,
+        "filters": {
+          "q": "to:foundationalagentsnyuagentav@gmail.com -from:me",
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "lgjd7A8fiXBGF9zx",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "id": "0f0c73b6-e0c7-40cf-90c6-63dae92836bf",
+      "name": "Gateway Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "allowed_senders",
+              "value": "[redacted-email] , [redacted-email] , [redacted-email], [redacted-email]",
+              "type": "string"
+            },
+            {
+              "id": "s2",
+              "name": "api_url",
+              "value": "https://franki3.app.n8n.cloud/webhook/thesislab",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5687a736-c8f3-4bc3-b77c-bb76ff4fa830",
+      "name": "Parse Email Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const m = $json;\nconst sender = String((m.from && m.from.value && m.from.value[0] && m.from.value[0].address) || '').toLowerCase().trim();\nconst allowed = String(m.allowed_senders || '').toLowerCase().split(/[,;\\s]+/).filter(Boolean);\nconst authBlob = JSON.stringify(m.headers || {}).toLowerCase();\nconst senderVerified = /dmarc=pass/.test(authBlob) || (/spf=pass/.test(authBlob) && /dkim=pass/.test(authBlob));\n\n// Strip quoted history from replies\nconst lines = String(m.text || '').replace(/\\r/g, '').split('\\n');\nconst kept = [];\nfor (const line of lines) {\n  if (/^\\s*>/.test(line)) break;\n  if (/^On .+wrote:\\s*$/.test(line.trim())) break;\n  if (/^-{2,}\\s*Original Message/i.test(line.trim())) break;\n  kept.push(line);\n}\nconst body = kept.join('\\n').trim();\nconst subject = String(m.subject || '').replace(/^(re|fwd?):\\s*/gi, '').trim();\nconst firstLine = (body.split('\\n')[0] || '').trim();\n\nlet request = null;\nconst cmd = (firstLine + ' ' + subject).match(/\\b(APPROVE|REJECT|EVALUATE|CLOSE)\\s+(TL-[A-Z0-9-]+)(\\s+EARLY)?/i);\nif (cmd) {\n  const verb = cmd[1].toUpperCase();\n  const id = cmd[2].toUpperCase();\n  if (verb === 'APPROVE') request = { action: 'approve_trade', experiment_id: id, confirm: true };\n  if (verb === 'REJECT') request = { action: 'reject', experiment_id: id };\n  if (verb === 'EVALUATE') request = { action: 'evaluate', experiment_id: id };\n  if (verb === 'CLOSE') request = { action: 'close_position', experiment_id: id, confirm: true, early_exit: !!cmd[3] };\n} else if (body.length >= 10) {\n  const amt = body.match(/\\$\\s?([0-9][0-9,]*)/);\n  request = { action: 'analyze', thesis: body.slice(0, 4000), notional_usd: amt ? Number(amt[1].replace(/,/g, '')) : 0 };\n}\n\nconst isTrade = !!request && (request.action === 'approve_trade' || request.action === 'close_position');\nconst reasons = [];\nif (!sender || !allowed.includes(sender)) reasons.push('sender_not_allowed');\nif (isTrade && !senderVerified) reasons.push('sender_not_verified');\n\nreturn { json: {\n  message_id: m.id,\n  sender,\n  authorized: reasons.length === 0 && !!request,\n  allowed_sender: !reasons.includes('sender_not_allowed'),\n  reasons,\n  has_command: !!request,\n  request: request || {},\n  api_url: m.api_url,\n} };"
+      }
+    },
+    {
+      "id": "01ce4924-2049-4264-aa5a-191079960e8f",
+      "name": "Authorized Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "5f01506c-5fb7-4344-88b2-d9e8a69a7a28",
+      "name": "Call ThesisLab API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.api_url }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "ddab6035-1f4c-4687-8e2b-8d4e6e5c4576",
+      "name": "Format Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $json || {};\nconst req = $('Parse Email Command').item.json.request || {};\nconst L = [];\nconst p = r.proposal || {};\nif (!r || Object.keys(r).length === 0 || (r.ok === undefined && !r.action)) {\n  L.push('ThesisLab could not process this request right now. Nothing was traded. Please try again later.');\n} else if (r.action === 'analyze') {\n  if ((r.status === 'proposed' || r.status === 'proposal') && r.experiment_id) {\n    L.push('Arthur Voss here. Here is the experiment I would run.', '');\n    L.push('Experiment: ' + r.experiment_id);\n    L.push('Asset vs benchmark: ' + (p.asset || '?') + ' vs ' + (p.benchmark || '?'));\n    L.push('Horizon: ' + (p.horizon_days || '?') + ' trading days');\n    const risks = Array.isArray(p.risk_warnings) ? p.risk_warnings : [];\n    if (p.plain_idea) L.push('', 'The Idea: ' + p.plain_idea);\n    L.push('', 'The Bet: ' + (p.falsifiable_claim || ''), '  Measured by close-to-close total return.');\n    if (p.reason || p.rationale) L.push('', 'The Reason: ' + (p.reason || p.rationale));\n    if (p.main_risk || risks.length) L.push('', 'The Risk: ' + (p.main_risk || risks.join('; ')));\n    if (p.invalidation_rule) L.push('', 'What Would Prove Us Wrong: ' + p.invalidation_rule);\n    L.push('', 'The Verdict: pending until the test runs.');\n    if (p.entry_rule || p.exit_rule) L.push('', 'How we would trade it:');\n    if (p.entry_rule) L.push('  Get in: ' + p.entry_rule);\n    if (p.exit_rule) L.push('  Get out: ' + p.exit_rule);\n    if (p.market_data_summary) L.push('', 'Market data: ' + p.market_data_summary);\n    if (p.main_risk && risks.length) L.push('Other risks: ' + risks.join('; '));\n    L.push('', 'Paper allocation: $' + r.notional_usd + (r.allocation_capped ? ' (capped by ThesisLab policy)' : ''));\n    L.push('', 'Nothing has been traded. To place this PAPER order, reply with exactly:', '  APPROVE ' + r.experiment_id, 'To discard it, reply:', '  REJECT ' + r.experiment_id);\n  } else {\n    L.push('Arthur Voss here. I could not turn this into a tradable experiment yet.');\n    if (p.clarification_question) L.push('', 'Question: ' + p.clarification_question);\n    if (Array.isArray(r.validation_errors) && r.validation_errors.length) L.push('', 'Issues: ' + r.validation_errors.join('; '));\n    L.push('', 'No order can be placed for this result. Reply with a revised thesis to try again.');\n  }\n} else if (r.action === 'approve_trade') {\n  if (r.ok) L.push('Paper order submitted for ' + r.experiment_id + '.', 'Order: ' + r.paper_order_id + ' (' + r.order_status + '), ' + r.symbol + ', $' + r.notional_usd + ' notional.', 'Alpaca PAPER trading only. If the market is closed it fills at the next session.', '', 'Later, reply EVALUATE ' + r.experiment_id + ' to score it, or CLOSE ' + r.experiment_id + ' to exit after the horizon.');\n  else L.push('Approval for ' + (r.experiment_id || req.experiment_id) + ' was blocked. No order was placed.', 'Reasons: ' + ((r.reasons || []).join('; ') || r.error || 'unknown'));\n} else if (r.action === 'reject') {\n  L.push(r.ok ? 'Experiment ' + r.experiment_id + ' rejected. No order was placed.' : 'Could not reject ' + (r.experiment_id || req.experiment_id) + ': it was not found or is no longer pending.');\n} else if (r.action === 'evaluate') {\n  if (r.ok && r.outcome) {\n    const o = r.outcome;\nconst VL = (v) => { const s = String(v || ''); const base = s.replace(/^interim_/, ''); const m = { supported: 'Held up', rejected: \"Didn't hold up\", inconclusive: 'Too close to call' }; return (s.indexOf('interim_') === 0 ? 'Early read: ' : '') + (m[base] || s); };\n    L.push('Results for ' + r.experiment_id + ':', '');\n    L.push('The Verdict: ' + (o.verdict_label || VL(o.verdict)));\n    L.push('Our pick: ' + o.asset_return + ' | Benchmark: ' + o.benchmark_return + ' | Difference: ' + o.alpha);\n    L.push('Progress: ' + o.trading_days_elapsed + ' of ' + o.horizon_days + ' trading days' + (o.horizon_complete ? ' (test complete)' : ''));\n    L.push('Entry price: $' + o.fill_price + ', latest close: $' + o.asset_last_close + ' (as of ' + String(o.as_of || '').slice(0, 10) + ')');\n    L.push('', 'Positions are not closed by evaluation. Reply CLOSE ' + r.experiment_id + ' after the horizon, or CLOSE ' + r.experiment_id + ' EARLY to exit now.');\n  } else L.push('Could not evaluate ' + (r.experiment_id || req.experiment_id) + ': ' + (r.error || 'unknown error') + '.');\n} else if (r.action === 'close_position') {\n  if (r.ok) L.push('Paper position closed for ' + r.experiment_id + (r.early_exit ? ' (early exit)' : '') + '.', 'Sell order: ' + r.sell_order_id + ' (' + r.sell_order_status + '), ' + r.qty + ' ' + r.symbol + '.', 'Alpaca PAPER trading only.');\n  else L.push('Close for ' + (r.experiment_id || req.experiment_id) + ' was blocked. Nothing was sold.', 'Reasons: ' + ((r.reasons || []).join('; ') || r.error || 'unknown'));\n} else {\n  L.push('ThesisLab returned an unexpected response. Nothing was traded.');\n}\nL.push('', '--', 'ThesisLab (paper trading only). Commands: send a thesis in plain English, or reply APPROVE / REJECT / EVALUATE / CLOSE <experiment id>.');\nreturn { json: { message_id: $('Parse Email Command').item.json.message_id, reply_text: L.join('\\n') } };"
+      }
+    },
+    {
+      "id": "790cdcfe-2e06-4640-aeee-6de6701f7c90",
+      "name": "Reply to Sender",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "reply",
+        "messageId": "={{ $json.message_id }}",
+        "emailType": "text",
+        "message": "={{ $json.reply_text }}",
+        "options": {
+          "appendAttribution": false,
+          "replyToSenderOnly": true,
+          "senderName": "Arthur Voss (ThesisLab)"
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "lgjd7A8fiXBGF9zx",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "id": "4f6fe826-1831-45f9-89eb-87fc0e9a6272",
+      "name": "Mark Handled",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "markAsRead",
+        "messageId": "={{ $(\"Format Reply\").item.json.message_id }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "lgjd7A8fiXBGF9zx",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "id": "96461a61-0671-47a3-b76a-39ba2adadf3d",
+      "name": "Mark Ignored",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "markAsRead",
+        "messageId": "={{ $json.message_id }}"
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "lgjd7A8fiXBGF9zx",
+          "name": "Gmail account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Agent Inbox": {
+      "main": [
+        [
+          {
+            "node": "Gateway Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gateway Settings": {
+      "main": [
+        [
+          {
+            "node": "Parse Email Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Email Command": {
+      "main": [
+        [
+          {
+            "node": "Authorized Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized Request?": {
+      "main": [
+        [
+          {
+            "node": "Call ThesisLab API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Ignored",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call ThesisLab API": {
+      "main": [
+        [
+          {
+            "node": "Format Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Reply": {
+      "main": [
+        [
+          {
+            "node": "Reply to Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply to Sender": {
+      "main": [
+        [
+          {
+            "node": "Mark Handled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "vQi45xvLwVGwvsty"
+  },
+  "tags": []
+}
