@@ -1,0 +1,2359 @@
+{
+  "id": "UxCEQoEMgaKpKXDS",
+  "name": "ThesisLab - Thesis to Paper-Trade Experiment",
+  "active": true,
+  "nodes": [
+    {
+      "id": "782d4289-840a-48c0-b556-610a4f1c7241",
+      "name": "ThesisLab Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "thesislab",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "webhookId": "f4db77f2-281e-4ba0-b932-65677ec44a5d"
+    },
+    {
+      "id": "31774d2d-5873-4bfa-8655-652f07e736d4",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "renameOutput": true,
+              "outputKey": "analyze",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "analyze",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "approve_trade",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "approve_trade",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "reject",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "evaluate",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "evaluate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "close_position",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "close_position",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "unknown"
+        }
+      }
+    },
+    {
+      "id": "36750927-4c64-438c-98eb-8ed2f889f903",
+      "name": "Normalize Thesis Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "t1",
+              "name": "thesis",
+              "value": "={{ String($json.body.thesis || \"\").trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "t2",
+              "name": "benchmark_hint",
+              "value": "={{ $json.body.benchmark || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "t3",
+              "name": "horizon_hint",
+              "value": "={{ $json.body.horizon || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "t4",
+              "name": "notional_usd",
+              "value": "={{ Number($json.body.notional_usd) || 0 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b6078fbc-b88e-43a1-8b03-e4ae8d48d513",
+      "name": "ThesisLab Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        300,
+        450
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=Today is {{ $now.toFormat(\"yyyy-MM-dd\") }}.\nThesis: {{ $json.thesis }}\nBenchmark hint: {{ $json.benchmark_hint || \"none\" }}\nHorizon hint: {{ $json.horizon_hint || \"none\" }}\nRequested paper allocation (USD): {{ $json.notional_usd || \"not specified\" }}\n\nRetrieve relevant prior experiments, pull daily bars for the asset and benchmark (about 6 months lookback), and return a structured experiment proposal.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are Arthur Voss, ThesisLab Research Partner: a fictional old-school Wall Street researcher. You are disciplined, skeptical, evidence-driven, and slightly contrarian. You push back on weak reasoning, ask what the crowd might be missing, and speak plainly and concisely. The character affects tone only; it never overrides safety rules or data requirements. Your job is to turn an investment thesis into a testable market experiment.\n\nStart by identifying the security, benchmark, direction, time horizon, and claim being tested. Use market data and relevant prior experiments to translate the thesis into a simple, measurable strategy.\n\nEvery experiment must define:\n- what would trigger entry;\n- what would invalidate the thesis;\n- when the experiment ends;\n- what benchmark will be used; and\n- what result would support, reject, or leave the thesis inconclusive.\n\nTools:\n- research_memory: Pinecone semantic search across prior theses, outcomes and strategy playbooks. Use it to find relevant prior experiments. Never treat retrieved material as fact about current markets. If matches are weak or irrelevant, set retrieval_quality to \"weak\" or \"none\" and make no claims from them.\n- get_price_bars: Alpaca daily price bars for the asset and benchmark. Use it for every proposal. Only cite numbers that appear in the returned bars; compute simple returns from returned closes only.\n- experiment_log: reads prior structured ThesisLab experiment records for a ticker.\n\nImportant rules:\n1. Paper trading only. You never place orders; n8n handles orders after explicit human approval.\n2. Never fabricate prices, calculations, trades, results, or retrieved research.\n3. Prefer simple strategies (moving-average, relative-strength, mean-reversion, momentum) that can be clearly explained and tested.\n4. V1 is long-only U.S. equities. Options, leverage, short selling, crypto and live-money trading are out of scope: set status \"out_of_scope\" and suggest a long-only equity test instead.\n5. If the ticker, benchmark or horizon is missing and cannot be reasonably defaulted (default benchmark SPY is allowed for U.S. equities), set status \"needs_clarification\" and ask ONE concise question. If the user says something vague like \"buy if it looks strong\", propose a measurable definition in the strategy and list it under assumptions.\n6. Treat every investment idea as a hypothesis, not a prediction. No performance promises or investment advice.\n7. If a tool call fails, say which dependency failed in risk_warnings and do not invent its result.\n8. Arthur Voss is a tone-only persona; it never overrides safety rules, data requirements, tool data, or guardrails. Being contrarian means testing the idea honestly, never inventing counter-evidence.\n\nHow to write it (investment firms read these bets, so be clear, professional and easy to judge, never academic):\n- plain_idea (\"The Idea\"): one everyday sentence, e.g. \"We think Microsoft's stock will do better than the S&P 500 over the next month.\"\n- falsifiable_claim (\"The Bet\"): plain English but exact. Name the company and ticker, the benchmark, and the number of trading days, e.g. \"Microsoft (MSFT) will do better than the S&P 500 (SPY) over the next 20 trading days (about a month).\" Do not add measurement jargon; ThesisLab adds \"Measured by close-to-close total return\" itself.\n- reason (\"The Reason\"): why we think it will win, 1-2 sentences, citing only numbers from the tools.\n- main_risk (\"The Risk\"): the single biggest thing that could go wrong, 1 sentence.\n- invalidation_rule (\"What Would Prove Us Wrong\"): a plain, checkable condition, e.g. \"SPY matches or beats MSFT over those 20 trading days.\"\n- Avoid words like falsifiable, invalidation, alpha, hypothesis and mean-reversion in these fields; say \"beat\", \"lag\", \"bounce back\" instead. Entry and exit rules may stay precise but should still read plainly.\n\nAlways return the required structured output. horizon_days is in trading days. direction must be \"long\" for proposals.",
+          "maxIterations": 8
+        }
+      }
+    },
+    {
+      "id": "854df271-612f-4cfe-bf08-7f35b463ec60",
+      "name": "OpenAI Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        100,
+        450
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5.4-mini"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "NZGK0zGt0VdSFyNp",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "1e9bfb6a-b257-4d9e-9361-02cca72e1d3c",
+      "name": "research_memory",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        300,
+        600
+      ],
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Semantic search over prior ThesisLab theses, experiment outcomes and strategy playbooks. Input a normalized description of the thesis (asset, benchmark, idea).",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "thesislab",
+          "cachedResultName": "thesislab"
+        },
+        "topK": 5,
+        "includeDocumentMetadata": true,
+        "options": {
+          "pineconeNamespace": "thesislab"
+        }
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "gl7Vg1mrO0wAq72Z",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "id": "39496115-81fd-42c0-bbe3-4b239bbecec8",
+      "name": "Research Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        600
+      ],
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "NZGK0zGt0VdSFyNp",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "ac65993e-4e16-4b79-bfa3-a8f927c439a6",
+      "name": "get_price_bars",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.5,
+      "position": [
+        100,
+        750
+      ],
+      "parameters": {
+        "toolDescription": "Get daily OHLCV bars from Alpaca market data for one or more U.S. equity symbols (e.g. the asset and its benchmark). Response: { bars: { SYMBOL: [{ t, o, h, l, c, v }] } }.",
+        "method": "GET",
+        "url": "https://data.alpaca.markets/v2/stocks/bars",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbols",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('symbols', 'Comma-separated uppercase tickers, e.g. NVDA,SPY') }}"
+            },
+            {
+              "name": "start",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('start_date', 'Start date YYYY-MM-DD for the lookback window') }}"
+            },
+            {
+              "name": "timeframe",
+              "value": "1Day"
+            },
+            {
+              "name": "adjustment",
+              "value": "all"
+            },
+            {
+              "name": "feed",
+              "value": "iex"
+            },
+            {
+              "name": "limit",
+              "value": "10000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "5lpeshXEYcFYKdIo",
+          "name": "Alpaca Paper API (Frank B)"
+        }
+      }
+    },
+    {
+      "id": "db59d3a8-b33d-419a-b341-b9d7844e3cfd",
+      "name": "experiment_log",
+      "type": "n8n-nodes-base.dataTableTool",
+      "typeVersion": 1.1,
+      "position": [
+        100,
+        900
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "asset",
+              "condition": "eq",
+              "keyValue": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('asset', 'Uppercase ticker to look up prior experiments for') }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 10
+      }
+    },
+    {
+      "id": "7547a6cb-06f4-4122-95b5-76c9fa400f48",
+      "name": "Proposal Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        100,
+        1050
+      ],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"enum\":[\"proposal\",\"needs_clarification\",\"out_of_scope\"]},\"clarification_question\":{\"type\":\"string\"},\"asset\":{\"type\":\"string\"},\"benchmark\":{\"type\":\"string\"},\"direction\":{\"type\":\"string\"},\"horizon_days\":{\"type\":\"number\"},\"plain_idea\":{\"type\":\"string\",\"description\":\"The Idea: one plain-English sentence a non-expert understands\"},\"falsifiable_claim\":{\"type\":\"string\",\"description\":\"The Bet: plain English, names the company, ticker, benchmark and exact number of trading days\"},\"reason\":{\"type\":\"string\",\"description\":\"The Reason: why we think it will win, 1-2 plain sentences grounded in the data\"},\"main_risk\":{\"type\":\"string\",\"description\":\"The Risk: the biggest thing that could go wrong, 1 plain sentence\"},\"strategy_family\":{\"type\":\"string\"},\"entry_rule\":{\"type\":\"string\"},\"exit_rule\":{\"type\":\"string\"},\"invalidation_rule\":{\"type\":\"string\",\"description\":\"What Would Prove Us Wrong: a plain-English checkable condition\"},\"evaluation\":{\"type\":\"object\",\"properties\":{\"supported_if\":{\"type\":\"string\"},\"rejected_if\":{\"type\":\"string\"},\"inconclusive_if\":{\"type\":\"string\"}}},\"market_data_summary\":{\"type\":\"string\"},\"retrieval_quality\":{\"type\":\"string\",\"enum\":[\"relevant\",\"weak\",\"none\"]},\"retrieved_sources\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"rationale\":{\"type\":\"string\"},\"assumptions\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"risk_warnings\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"suggested_notional_usd\":{\"type\":\"number\"}},\"required\":[\"status\"]}"
+      }
+    },
+    {
+      "id": "56a9a497-a87a-43b0-bfdf-eb404ae99224",
+      "name": "Validate Strategy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        450
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const CAP = 1000;\nconst DEFAULT_NOTIONAL = 500;\nconst req = $('Normalize Thesis Request').first().json;\nconst out = $input.first().json.output || {};\nconst re = /^[A-Z]{1,5}(\\.[A-Z])?$/;\nconst errors = [];\nconst asset = String(out.asset || '').toUpperCase().trim();\nconst benchmark = String(out.benchmark || '').toUpperCase().trim();\nlet status = out.status || 'needs_clarification';\nif (!req.thesis) { status = 'needs_clarification'; errors.push('No thesis supplied'); }\nif (status === 'proposal') {\n  if (!re.test(asset)) errors.push('Invalid or missing asset symbol');\n  if (!re.test(benchmark)) errors.push('Invalid or missing benchmark symbol');\n  if (String(out.direction || '').toLowerCase() !== 'long') errors.push('V1 is long-only');\n  const h = Number(out.horizon_days);\n  if (!(h >= 1 && h <= 252)) errors.push('Horizon must be 1-252 trading days');\n  for (const k of ['falsifiable_claim', 'entry_rule', 'exit_rule', 'invalidation_rule']) {\n    if (!out[k]) errors.push('Missing ' + k);\n  }\n  if (errors.length) status = 'validation_failed';\n}\nlet notional = Number(req.notional_usd) || Number(out.suggested_notional_usd) || DEFAULT_NOTIONAL;\nconst allocationCapped = notional > CAP;\nnotional = Math.min(Math.max(notional, 1), CAP);\nconst stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');\nconst experimentId = 'TL-' + stamp + '-' + Math.random().toString(36).slice(2, 8).toUpperCase();\nreturn [{ json: {\n  experiment_id: experimentId,\n  status,\n  record_status: status === 'proposal' ? 'proposed' : status,\n  validation_errors: errors,\n  thesis: req.thesis,\n  asset,\n  benchmark,\n  direction: 'long',\n  horizon_days: Number(out.horizon_days) || 0,\n  falsifiable_claim: out.falsifiable_claim || '',\n  notional_usd: notional,\n  allocation_capped: allocationCapped,\n  proposal: out,\n  proposed_at: new Date().toISOString(),\n  requires_approval: status === 'proposal',\n} }];"
+      }
+    },
+    {
+      "id": "7ed8d97a-b832-4832-8330-608b74d37e4f",
+      "name": "Log Proposal",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        450
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "experiment_id": "={{ $json.experiment_id }}",
+            "status": "={{ $json.record_status }}",
+            "thesis": "={{ $json.thesis }}",
+            "asset": "={{ $json.asset }}",
+            "benchmark": "={{ $json.benchmark }}",
+            "direction": "={{ $json.direction }}",
+            "horizon_days": "={{ $json.horizon_days }}",
+            "falsifiable_claim": "={{ $json.falsifiable_claim }}",
+            "strategy_json": "={{ JSON.stringify($json.proposal) }}",
+            "notional_usd": "={{ $json.notional_usd }}",
+            "proposed_at": "={{ $json.proposed_at }}",
+            "last_error": "={{ $json.validation_errors.join(\"; \") }}"
+          },
+          "schema": [
+            {
+              "id": "experiment_id",
+              "displayName": "experiment_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "thesis",
+              "displayName": "thesis",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "asset",
+              "displayName": "asset",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "benchmark",
+              "displayName": "benchmark",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "direction",
+              "displayName": "direction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "horizon_days",
+              "displayName": "horizon_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "falsifiable_claim",
+              "displayName": "falsifiable_claim",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "strategy_json",
+              "displayName": "strategy_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notional_usd",
+              "displayName": "notional_usd",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposed_at",
+              "displayName": "proposed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_error",
+              "displayName": "last_error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b989aee2-193f-4034-96b0-521dd4179115",
+      "name": "Respond Proposal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, action: \"analyze\", experiment_id: $(\"Validate Strategy\").item.json.experiment_id, status: $(\"Validate Strategy\").item.json.status, requires_approval: $(\"Validate Strategy\").item.json.requires_approval, notional_usd: $(\"Validate Strategy\").item.json.notional_usd, allocation_capped: $(\"Validate Strategy\").item.json.allocation_capped, validation_errors: $(\"Validate Strategy\").item.json.validation_errors, proposal: $(\"Validate Strategy\").item.json.proposal, next_step: $(\"Validate Strategy\").item.json.requires_approval ? \"POST action=approve_trade with experiment_id and confirm=true to submit the paper order, or action=reject.\" : \"No order can be placed for this result.\" }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b5761f12-5f1b-4948-a41a-f69748d3bbc0",
+      "name": "Load Experiment",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        450
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "experiment_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.experiment_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "398a9212-e66c-4bbb-b96f-5a3c2c99c04c",
+      "name": "Recheck Guardrails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        450
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const CAP = 1000;\nconst PAPER_BASE = 'https://paper-api.alpaca.markets';\nconst body = $('ThesisLab Webhook').first().json.body || {};\nconst row = $input.first().json || {};\nconst reasons = [];\nif (!row.experiment_id) {\n  reasons.push('Experiment not found');\n} else {\n  if (row.status !== 'proposed') reasons.push('Experiment status is \"' + row.status + '\"; only proposed experiments can be approved. Submit a new proposal instead.');\n  if (!/^[A-Z]{1,5}(\\.[A-Z])?$/.test(row.asset || '')) reasons.push('Invalid symbol');\n  if (row.direction !== 'long') reasons.push('V1 is long-only');\n  if (!(Number(row.notional_usd) > 0 && Number(row.notional_usd) <= CAP)) reasons.push('Allocation outside the $' + CAP + ' cap');\n}\nconst confirmed = body.confirm === true || body.confirm === 'true';\nif (!confirmed) reasons.push('Explicit human confirmation (confirm: true) is required');\nif (!PAPER_BASE.startsWith('https://paper-api.alpaca.markets')) reasons.push('Paper endpoint verification failed');\nreturn [{ json: {\n  ok: reasons.length === 0,\n  reasons,\n  experiment_id: row.experiment_id || body.experiment_id || null,\n  asset: row.asset || null,\n  benchmark: row.benchmark || null,\n  thesis: row.thesis || '',\n  falsifiable_claim: row.falsifiable_claim || '',\n  horizon_days: row.horizon_days || 0,\n  notional_usd: Number(row.notional_usd) || 0,\n} }];"
+      }
+    },
+    {
+      "id": "a496cfc3-d5b5-40d7-9f82-d4701300303c",
+      "name": "Guardrails Pass?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        450
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "g1",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "bfd50c7c-7040-490c-b4a5-e717aa2c4054",
+      "name": "Verify Tradable Asset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1100,
+        450
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://paper-api.alpaca.markets/v2/assets/{{ $json.asset }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "5lpeshXEYcFYKdIo",
+          "name": "Alpaca Paper API (Frank B)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "0e6fb6e8-b079-4ef6-9f32-c8713e2f9eac",
+      "name": "Asset Tradable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        450
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1",
+              "leftValue": "={{ $json.tradable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "a2",
+              "leftValue": "={{ $json.class }}",
+              "rightValue": "us_equity",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "a3",
+              "leftValue": "={{ $json.fractionable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "4fc0cbba-8463-41da-9497-be432000ae64",
+      "name": "Submit Paper Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1500,
+        450
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://paper-api.alpaca.markets/v2/orders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ symbol: $(\"Recheck Guardrails\").item.json.asset, notional: String($(\"Recheck Guardrails\").item.json.notional_usd), side: \"buy\", type: \"market\", time_in_force: \"day\", client_order_id: $(\"Recheck Guardrails\").item.json.experiment_id }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "5lpeshXEYcFYKdIo",
+          "name": "Alpaca Paper API (Frank B)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "b9a162cb-a135-4baa-b0e8-b234709ba077",
+      "name": "Log Approved Order",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1700,
+        450
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "experiment_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Recheck Guardrails\").item.json.experiment_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "approved",
+            "order_id": "={{ $json.id }}",
+            "order_status": "={{ $json.status }}",
+            "decided_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_id",
+              "displayName": "order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_status",
+              "displayName": "order_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7faa8e18-2ca4-4dcf-8a73-fe855b3e56a0",
+      "name": "Save Thesis Memory",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        300,
+        1200
+      ],
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "thesislab",
+          "cachedResultName": "thesislab"
+        },
+        "options": {
+          "pineconeNamespace": "thesislab"
+        }
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "gl7Vg1mrO0wAq72Z",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "id": "95921eee-922b-4558-bdc9-f8a8090f1ba2",
+      "name": "Thesis Memory Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        1200
+      ],
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "NZGK0zGt0VdSFyNp",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "ab7d825c-c3c1-4321-b596-bf9d79e9c4a2",
+      "name": "Thesis Memory Document",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        100,
+        1350
+      ],
+      "parameters": {
+        "dataType": "json",
+        "jsonMode": "expressionData",
+        "jsonData": "=Experiment {{ $(\"Recheck Guardrails\").item.json.experiment_id }} (approved paper trade). Asset: {{ $(\"Recheck Guardrails\").item.json.asset }} vs {{ $(\"Recheck Guardrails\").item.json.benchmark }}. Horizon: {{ $(\"Recheck Guardrails\").item.json.horizon_days }} trading days. Thesis: {{ $(\"Recheck Guardrails\").item.json.thesis }}. The Bet: {{ $(\"Recheck Guardrails\").item.json.falsifiable_claim }}. Paper order: {{ $(\"Submit Paper Order\").item.json.id }}.",
+        "textSplittingMode": "simple",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "experiment_id",
+                "value": "={{ $(\"Recheck Guardrails\").item.json.experiment_id }}"
+              },
+              {
+                "name": "asset",
+                "value": "={{ $(\"Recheck Guardrails\").item.json.asset }}"
+              },
+              {
+                "name": "record_type",
+                "value": "thesis"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "b0aefb21-84e3-4095-b061-fd90a36c33ca",
+      "name": "Respond Order Submitted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        500,
+        1200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, action: \"approve_trade\", experiment_id: $(\"Recheck Guardrails\").first().json.experiment_id, paper_order_id: $(\"Submit Paper Order\").first().json.id, order_status: $(\"Submit Paper Order\").first().json.status, symbol: $(\"Submit Paper Order\").first().json.symbol, notional_usd: $(\"Recheck Guardrails\").first().json.notional_usd, note: \"Alpaca PAPER trading only. Market DAY order; if the market is closed it queues for the next session.\" }) }}",
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "48fe47ab-9b22-4f54-8782-580812a5e90a",
+      "name": "Respond Order Failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1300,
+        600
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, action: \"approve_trade\", experiment_id: $(\"Recheck Guardrails\").first().json.experiment_id, failed_dependency: \"Alpaca paper API\", error: $input.item.json.error || \"Unknown error\", note: \"Failed closed. No order was confirmed; the proposal is preserved.\" }) }}",
+        "options": {
+          "responseCode": 502
+        }
+      }
+    },
+    {
+      "id": "8591c47a-204f-45d7-a510-6d8273152467",
+      "name": "Respond Not Tradable",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1500,
+        600
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, action: \"approve_trade\", experiment_id: $(\"Recheck Guardrails\").item.json.experiment_id, blocked: true, reasons: [\"Asset \" + ($json.symbol || \"\") + \" is not a tradable, fractionable U.S. equity on Alpaca paper. Choose another asset.\"] }) }}",
+        "options": {
+          "responseCode": 422
+        }
+      }
+    },
+    {
+      "id": "df12d1e2-f306-4f16-8c12-5bcd74f89239",
+      "name": "Respond Guardrail Block",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        600
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, action: \"approve_trade\", experiment_id: $json.experiment_id, blocked: true, reasons: $json.reasons }) }}",
+        "options": {
+          "responseCode": 409
+        }
+      }
+    },
+    {
+      "id": "73244b52-4d4b-42a9-8b97-394da4416bdf",
+      "name": "Mark Rejected",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        600
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "experiment_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.experiment_id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "proposed"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "rejected",
+            "decided_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decided_at",
+              "displayName": "decided_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "189c532f-bbbd-48fd-8708-129a92828623",
+      "name": "Respond Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        700,
+        600
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: !!$json.id, action: \"reject\", experiment_id: $(\"ThesisLab Webhook\").first().json.body.experiment_id, status: $json.id ? \"rejected\" : \"not_found_or_not_pending\", note: \"No order was placed.\" }) }}",
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "ce998532-b977-4871-8ca4-a841ad0e5f81",
+      "name": "Load Experiment for Eval",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        750
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "experiment_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.experiment_id }}"
+            },
+            {
+              "keyName": "order_id",
+              "condition": "isNotEmpty"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "a42383c3-ea65-48c9-8381-9011c625ac0c",
+      "name": "Get Order Fill",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        700,
+        750
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://paper-api.alpaca.markets/v2/orders/{{ $json.order_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "5lpeshXEYcFYKdIo",
+          "name": "Alpaca Paper API (Frank B)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "68682a48-76ef-4444-8e13-37b813de7350",
+      "name": "Get Evaluation Bars",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        900,
+        750
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://data.alpaca.markets/v2/stocks/bars",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbols",
+              "value": "={{ $(\"Load Experiment for Eval\").item.json.asset }},{{ $(\"Load Experiment for Eval\").item.json.benchmark }}"
+            },
+            {
+              "name": "start",
+              "value": "={{ String($json.filled_at || \"\").slice(0, 10) }}"
+            },
+            {
+              "name": "timeframe",
+              "value": "1Day"
+            },
+            {
+              "name": "adjustment",
+              "value": "all"
+            },
+            {
+              "name": "feed",
+              "value": "iex"
+            },
+            {
+              "name": "limit",
+              "value": "10000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "5lpeshXEYcFYKdIo",
+          "name": "Alpaca Paper API (Frank B)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "56914e3c-da7d-41fd-8ba8-0480795856e2",
+      "name": "Compute Outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        750
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const BAND = 0.01; // +/-1% edge band: Held up / Didn't hold up, otherwise Too close to call\nconst row = $('Load Experiment for Eval').first().json;\nconst order = $('Get Order Fill').first().json;\nconst bars = ($input.first().json || {}).bars || {};\nconst a = bars[row.asset] || [];\nconst b = bars[row.benchmark] || [];\nconst fill = Number(order.filled_avg_price);\nif (!fill || !a.length || !b.length) {\n  return [{ json: { ok: false, experiment_id: row.experiment_id, error: 'Missing fill price or benchmark data; no result computed.', order_status: order.status || null } }];\n}\nconst assetLast = Number(a[a.length - 1].c);\nconst benchFirst = Number(b[0].o);\nconst benchLast = Number(b[b.length - 1].c);\nconst assetReturn = assetLast / fill - 1;\nconst benchmarkReturn = benchLast / benchFirst - 1;\nconst alpha = assetReturn - benchmarkReturn;\nconst tradingDays = a.length;\nconst complete = tradingDays >= Number(row.horizon_days || 0);\nlet verdict = 'inconclusive';\nif (alpha > BAND) verdict = 'supported';\nelse if (alpha < -BAND) verdict = 'rejected';\nconst pct = (x) => (x * 100).toFixed(2) + '%';\nconst LABELS = { supported: 'Held up', rejected: \"Didn't hold up\", inconclusive: 'Too close to call' };\nconst outcome = {\n  verdict: complete ? verdict : 'interim_' + verdict,\n  verdict_label: (complete ? '' : 'Early read: ') + LABELS[verdict],\n  horizon_complete: complete,\n  trading_days_elapsed: tradingDays,\n  horizon_days: row.horizon_days,\n  fill_price: fill,\n  asset_last_close: assetLast,\n  asset_return: pct(assetReturn),\n  benchmark_return: pct(benchmarkReturn),\n  alpha: pct(alpha),\n  as_of: a[a.length - 1].t,\n};\nconst lesson = 'Experiment ' + row.experiment_id + ' (' + row.asset + ' vs ' + row.benchmark + '): ' + outcome.verdict_label + '. Asset ' + outcome.asset_return + ' vs benchmark ' + outcome.benchmark_return + ' (alpha ' + outcome.alpha + ') over ' + tradingDays + ' trading days. The Bet: ' + row.falsifiable_claim;\nreturn [{ json: { ok: true, experiment_id: row.experiment_id, asset: row.asset, outcome, lesson, record_status: row.status === 'closed' ? 'closed' : (complete ? 'evaluated' : 'approved') } }];"
+      }
+    },
+    {
+      "id": "80fa3e16-6834-49e0-8017-f9b5bd025149",
+      "name": "Record Outcome",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1300,
+        750
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "experiment_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.experiment_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "outcome": "={{ $json.ok ? JSON.stringify($json.outcome) : \"\" }}",
+            "last_error": "={{ $json.ok ? \"\" : $json.error }}",
+            "status": "={{ $json.ok ? $json.record_status : $(\"Load Experiment for Eval\").item.json.status }}",
+            "order_status": "={{ $(\"Get Order Fill\").item.json.status }}"
+          },
+          "schema": [
+            {
+              "id": "outcome",
+              "displayName": "outcome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_error",
+              "displayName": "last_error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_status",
+              "displayName": "order_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8bc3eca2-5b5a-4307-a4dd-60d1706742c9",
+      "name": "Save Outcome Memory",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        300,
+        1500
+      ],
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "thesislab",
+          "cachedResultName": "thesislab"
+        },
+        "options": {
+          "pineconeNamespace": "thesislab"
+        }
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "gl7Vg1mrO0wAq72Z",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "id": "0dec5971-6a8f-4844-b85c-d663eba61193",
+      "name": "Outcome Memory Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        1500
+      ],
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "NZGK0zGt0VdSFyNp",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "a65de265-233b-492a-954a-01f68029f601",
+      "name": "Outcome Memory Document",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        100,
+        1650
+      ],
+      "parameters": {
+        "dataType": "json",
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $(\"Compute Outcome\").item.json.lesson || (\"Evaluation for \" + $(\"Compute Outcome\").item.json.experiment_id + \" could not be computed: \" + $(\"Compute Outcome\").item.json.error) }}",
+        "textSplittingMode": "simple",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "experiment_id",
+                "value": "={{ $(\"Compute Outcome\").item.json.experiment_id }}"
+              },
+              {
+                "name": "asset",
+                "value": "={{ $(\"Compute Outcome\").item.json.asset }}"
+              },
+              {
+                "name": "record_type",
+                "value": "outcome"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "c9603f00-905c-41ec-bbc7-3ab69cbfe994",
+      "name": "Respond Evaluation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        500,
+        1500
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: $(\"Compute Outcome\").first().json.ok, action: \"evaluate\", experiment_id: $(\"Compute Outcome\").first().json.experiment_id, outcome: $(\"Compute Outcome\").first().json.outcome || null, error: $(\"Compute Outcome\").first().json.error || null, note: \"Benchmark-relative mark-to-market of the paper position. To exit, POST action=close_position with experiment_id and confirm=true.\" }) }}",
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "333d377f-d658-4429-9a86-0ab63f4e72fa",
+      "name": "Respond Evaluation Failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        900,
+        900
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, action: \"evaluate\", experiment_id: $(\"ThesisLab Webhook\").first().json.body.experiment_id, failed_dependency: \"Alpaca API\", error: $input.item.json.error || \"Unknown error\" }) }}",
+        "options": {
+          "responseCode": 502
+        }
+      }
+    },
+    {
+      "id": "d13a4a58-27e8-4534-93ed-078b13432838",
+      "name": "Load Experiment for Close",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        900
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "experiment_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.experiment_id }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "cb08c7a2-0a25-46ce-a419-afa475f63aca",
+      "name": "Check Close Guardrails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $('ThesisLab Webhook').first().json.body || {};\nconst row = $input.first().json || {};\nconst reasons = [];\nconst confirmed = body.confirm === true || body.confirm === 'true';\nconst earlyExit = body.early_exit === true || body.early_exit === 'true';\nif (!row.experiment_id) {\n  reasons.push('Experiment not found');\n} else {\n  if (row.status === 'closed') reasons.push('Position for this experiment is already closed.');\n  else if (!['approved', 'evaluated'].includes(row.status)) reasons.push('Experiment status is \"' + row.status + '\"; only approved experiments with a paper position can be closed.');\n  if (!row.order_id) reasons.push('No entry paper order is recorded for this experiment.');\n  if (row.status === 'approved' && !earlyExit) reasons.push('Horizon not confirmed complete. Run action=evaluate first (status becomes \"evaluated\" when the horizon ends), or send early_exit=true to deliberately close early.');\n}\nif (!confirmed) reasons.push('Explicit human confirmation (confirm: true) is required to close a position');\nreturn [{ json: {\n  ok: reasons.length === 0,\n  reasons,\n  experiment_id: row.experiment_id || body.experiment_id || null,\n  asset: row.asset || null,\n  benchmark: row.benchmark || null,\n  order_id: row.order_id || null,\n  early_exit: row.status === 'approved' && earlyExit,\n  outcome: row.outcome || '',\n} }];"
+      }
+    },
+    {
+      "id": "de22f95a-d1f6-4a75-84f6-94bee1120e45",
+      "name": "Close Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "385e3d23-c455-4026-bed4-8f32ab03b334",
+      "name": "Get Entry Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1100,
+        900
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://paper-api.alpaca.markets/v2/orders/{{ $json.order_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "options": {}
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "680e58ac-2af8-4613-a97c-bed87bbbc1f2",
+      "name": "Entry Filled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1300,
+        900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f1",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "filled",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "f2",
+              "leftValue": "={{ Number($json.filled_qty) }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "f3",
+              "leftValue": "={{ $json.side }}",
+              "rightValue": "buy",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "668db477-ac2f-428e-806f-1585760304d0",
+      "name": "Submit Paper Sell",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1500,
+        900
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://paper-api.alpaca.markets/v2/orders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ symbol: $(\"Check Close Guardrails\").item.json.asset, qty: String($json.filled_qty), side: \"sell\", type: \"market\", time_in_force: \"day\", client_order_id: $(\"Check Close Guardrails\").item.json.experiment_id + \"-CLOSE\" }) }}",
+        "options": {}
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "5bfd3ee9-706d-4366-80a3-b89eb5f7c35c",
+      "name": "Log Closed Position",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1700,
+        900
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5mEbGUxFHPg3nvZn",
+          "cachedResultName": "thesislab_experiments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "experiment_id",
+              "condition": "eq",
+              "keyValue": "={{ $(\"Check Close Guardrails\").item.json.experiment_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "closed",
+            "close_order_id": "={{ $json.id }}",
+            "order_status": "={{ \"close_\" + $json.status }}",
+            "closed_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "close_order_id",
+              "displayName": "close_order_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "order_status",
+              "displayName": "order_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "closed_at",
+              "displayName": "closed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "eeb35f08-0287-4652-a698-da5d274afea4",
+      "name": "Save Close Memory",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        300,
+        1800
+      ],
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "thesislab",
+          "cachedResultName": "thesislab"
+        },
+        "options": {
+          "pineconeNamespace": "thesislab"
+        }
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "gl7Vg1mrO0wAq72Z",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "id": "299e87b4-6187-4e2e-ab4e-7c7f634ef3bd",
+      "name": "Close Memory Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        1800
+      ],
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "NZGK0zGt0VdSFyNp",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "id": "472e3ffc-eafb-4f71-b8e2-c734eff81591",
+      "name": "Close Memory Document",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        100,
+        1950
+      ],
+      "parameters": {
+        "dataType": "json",
+        "jsonMode": "expressionData",
+        "jsonData": "=Experiment {{ $(\"Check Close Guardrails\").item.json.experiment_id }} ({{ $(\"Check Close Guardrails\").item.json.asset }} vs {{ $(\"Check Close Guardrails\").item.json.benchmark }}) paper position closed{{ $(\"Check Close Guardrails\").item.json.early_exit ? \" EARLY, before the horizon ended\" : \" after the horizon ended\" }}. Entry fill {{ $(\"Get Entry Order\").item.json.filled_avg_price }} for {{ $(\"Get Entry Order\").item.json.filled_qty }} shares; sell order {{ $(\"Submit Paper Sell\").item.json.id }} ({{ $(\"Submit Paper Sell\").item.json.status }}). Last recorded outcome: {{ $(\"Check Close Guardrails\").item.json.outcome || \"not yet evaluated\" }}.",
+        "textSplittingMode": "simple",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "experiment_id",
+                "value": "={{ $(\"Check Close Guardrails\").item.json.experiment_id }}"
+              },
+              {
+                "name": "asset",
+                "value": "={{ $(\"Check Close Guardrails\").item.json.asset }}"
+              },
+              {
+                "name": "record_type",
+                "value": "close"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "c7c1e6d7-3b12-42b2-9658-c2c221b60dd0",
+      "name": "Respond Position Closed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        500,
+        1800
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, action: \"close_position\", experiment_id: $(\"Check Close Guardrails\").first().json.experiment_id, early_exit: $(\"Check Close Guardrails\").first().json.early_exit, sell_order_id: $(\"Submit Paper Sell\").first().json.id, sell_order_status: $(\"Submit Paper Sell\").first().json.status, qty: $(\"Submit Paper Sell\").first().json.qty, symbol: $(\"Submit Paper Sell\").first().json.symbol, note: \"Alpaca PAPER trading only. Market DAY sell; if the market is closed it queues for the next session.\" }) }}",
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "8832e914-7b33-46f4-8af4-68d3cef9af9f",
+      "name": "Respond Close Failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1300,
+        1050
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, action: \"close_position\", experiment_id: $(\"Check Close Guardrails\").first().json.experiment_id, failed_dependency: \"Alpaca paper API\", error: $input.item.json.error || \"Unknown error\", note: \"Failed closed. No sell was confirmed; the experiment record is unchanged.\" }) }}",
+        "options": {
+          "responseCode": 502
+        }
+      }
+    },
+    {
+      "id": "35bbadd7-9f91-48cf-be40-1f9411e4a34d",
+      "name": "Respond Entry Not Filled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1500,
+        1050
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, action: \"close_position\", experiment_id: $(\"Check Close Guardrails\").item.json.experiment_id, blocked: true, entry_order_status: $json.status || null, reasons: [\"Entry paper order is not filled, so there is no position to sell. No sell order was placed.\"] }) }}",
+        "options": {
+          "responseCode": 409
+        }
+      }
+    },
+    {
+      "id": "c46366d8-39d1-4eae-8321-e511ed670c5a",
+      "name": "Respond Close Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        1050
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, action: \"close_position\", experiment_id: $json.experiment_id, blocked: true, reasons: $json.reasons }) }}",
+        "options": {
+          "responseCode": 409
+        }
+      }
+    },
+    {
+      "id": "66842607-5ace-47ba-93a2-b7f0f633f52d",
+      "name": "Respond Invalid Action",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        500,
+        1050
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: \"Unknown action. Use analyze, approve_trade, reject, evaluate, or close_position.\" }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    }
+  ],
+  "connections": {
+    "ThesisLab Webhook": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Normalize Thesis Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Experiment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Experiment for Eval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Experiment for Close",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Thesis Request": {
+      "main": [
+        [
+          {
+            "node": "ThesisLab Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ThesisLab Agent": {
+      "main": [
+        [
+          {
+            "node": "Validate Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ThesisLab Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "research_memory": {
+      "ai_tool": [
+        [
+          {
+            "node": "ThesisLab Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "research_memory",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_price_bars": {
+      "ai_tool": [
+        [
+          {
+            "node": "ThesisLab Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "experiment_log": {
+      "ai_tool": [
+        [
+          {
+            "node": "ThesisLab Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposal Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "ThesisLab Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Strategy": {
+      "main": [
+        [
+          {
+            "node": "Log Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Proposal": {
+      "main": [
+        [
+          {
+            "node": "Respond Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Experiment": {
+      "main": [
+        [
+          {
+            "node": "Recheck Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recheck Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Guardrails Pass?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardrails Pass?": {
+      "main": [
+        [
+          {
+            "node": "Verify Tradable Asset",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Guardrail Block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Tradable Asset": {
+      "main": [
+        [
+          {
+            "node": "Asset Tradable?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Order Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asset Tradable?": {
+      "main": [
+        [
+          {
+            "node": "Submit Paper Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Not Tradable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Paper Order": {
+      "main": [
+        [
+          {
+            "node": "Log Approved Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Order Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Approved Order": {
+      "main": [
+        [
+          {
+            "node": "Save Thesis Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Thesis Memory": {
+      "main": [
+        [
+          {
+            "node": "Respond Order Submitted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Thesis Memory Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Save Thesis Memory",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Thesis Memory Document": {
+      "ai_document": [
+        [
+          {
+            "node": "Save Thesis Memory",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Rejected": {
+      "main": [
+        [
+          {
+            "node": "Respond Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Experiment for Eval": {
+      "main": [
+        [
+          {
+            "node": "Get Order Fill",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Order Fill": {
+      "main": [
+        [
+          {
+            "node": "Get Evaluation Bars",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Evaluation Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Evaluation Bars": {
+      "main": [
+        [
+          {
+            "node": "Compute Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Evaluation Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Outcome": {
+      "main": [
+        [
+          {
+            "node": "Record Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Outcome": {
+      "main": [
+        [
+          {
+            "node": "Save Outcome Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Outcome Memory": {
+      "main": [
+        [
+          {
+            "node": "Respond Evaluation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome Memory Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Save Outcome Memory",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outcome Memory Document": {
+      "ai_document": [
+        [
+          {
+            "node": "Save Outcome Memory",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Experiment for Close": {
+      "main": [
+        [
+          {
+            "node": "Check Close Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Close Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Close Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Get Entry Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Close Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Entry Order": {
+      "main": [
+        [
+          {
+            "node": "Entry Filled?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Close Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entry Filled?": {
+      "main": [
+        [
+          {
+            "node": "Submit Paper Sell",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Entry Not Filled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Paper Sell": {
+      "main": [
+        [
+          {
+            "node": "Log Closed Position",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Close Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Closed Position": {
+      "main": [
+        [
+          {
+            "node": "Save Close Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Close Memory": {
+      "main": [
+        [
+          {
+            "node": "Respond Position Closed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Memory Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Save Close Memory",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Memory Document": {
+      "ai_document": [
+        [
+          {
+            "node": "Save Close Memory",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "vQi45xvLwVGwvsty"
+  },
+  "tags": []
+}
